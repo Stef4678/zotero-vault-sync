@@ -555,7 +555,7 @@ export class Mirror {
 	} | null {
 		if (!raw) return null;
 		try {
-			const obj = JSON.parse(raw);
+			const obj: unknown = JSON.parse(raw);
 			let pageIndex: number | null = null;
 			let sortPosition: [number, number] | null = null;
 			if (obj && typeof obj === 'object') {

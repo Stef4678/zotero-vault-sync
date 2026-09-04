@@ -352,7 +352,7 @@ export class NotesEngine {
 		const d = record.data ?? ({} as ZoteroItemData);
 		const children = await this.mirror.childRecords(summary.key);
 
-		const date = d.date || (record.meta?.parsedDate as string | undefined) || '';
+		const date = d.date || record.meta?.parsedDate || '';
 		const creatorList = creatorNameList(d.creators) ?? '';
 		const maxC = settings.noteMaxCreators || 6;
 		const creatorsShort = (() => {
@@ -422,7 +422,7 @@ export class NotesEngine {
 				);
 				const annotations: TemplateElement[] = [];
 				for (const a of annChildren) {
-					const ad = a.item.data as ZoteroItemData;
+					const ad = a.item.data;
 					annotations.push({
 						tokens: {
 							colorEmoji: colorEmoji(ad.annotationColor),

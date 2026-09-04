@@ -18,8 +18,6 @@ import { ConfirmModal, ZoteroMirrorSettingTab } from './settingsTab';
 import { buildViewFiles, VIEW_MARKER } from './views';
 import { fmtTime, truncate } from './util';
 
-declare function require(id: string): any;
-
 export default class ZoteroMirrorPlugin extends Plugin {
 	settings!: ZoteroMirrorSettings;
 	mirror!: Mirror;
@@ -445,9 +443,13 @@ export default class ZoteroMirrorPlugin extends Plugin {
 	}
 }
 
+interface ElectronModule {
+	shell?: { openExternal(url: string): Promise<void> | void };
+}
+
 function openExternal(url: string): void {
 	try {
-		const electron = require('electron');
+		const electron = require('electron') as ElectronModule | undefined;
 		if (electron?.shell?.openExternal) {
 			void electron.shell.openExternal(url);
 			return;

@@ -1,9 +1,10 @@
 import { requestUrl } from 'obsidian';
 import type { RequestUrlParam } from 'obsidian';
+import { get as httpGet } from 'http';
+import { get as httpsGet } from 'https';
+import type { ClientRequest, IncomingMessage, RequestOptions } from 'http';
 import type { ZoteroItem, ZoteroCollection, MirrorState } from './types';
 import type { ZoteroMirrorSettings } from './settings';
-
-declare function require(id: string): any;
 
 /** Case-insensitive header accessor over response headers. */
 export class Headers {
@@ -162,19 +163,12 @@ export class ZoteroClient {
 			throw new ApiError(`requestUrl failed: ${msg}`, 'network');
 		}
 		this.throwForStatus(resp.status, url);
-		return { status: resp.status, rawHeaders: resp.headers as unknown as Record<string, string>, text: resp.text };
+		return { status: resp.status, rawHeaders: resp.headers, text: resp.text };
 	}
 
 	/** Plain Node http(s) request with a minimal header set (works against Zotero's local server). */
 	private nodeRequest(url: string, headers: Record<string, string>): Promise<RawResponse> {
 		return new Promise<RawResponse>((resolve, reject) => {
-			let mod: any;
-			try {
-				mod = url.startsWith('https:') ? require('https') : require('http');
-			} catch {
-				reject(new ApiError('Node http transport unavailable.', 'network'));
-				return;
-			}
 			let u: URL;
 			try {
 				u = new URL(url);
@@ -182,7 +176,11 @@ export class ZoteroClient {
 				reject(new ApiError(`Invalid URL: ${url}`, 'invalid'));
 				return;
 			}
-			const req = mod.get(
+			const isHttps = u.protocol === 'https:';
+			const doGet: (options: RequestOptions, callback: (res: IncomingMessage) => void) => ClientRequest = isHttps
+				? httpsGet
+				: httpGet;
+			const req = doGet(
 				{
 					hostname: u.hostname,
 					port: u.port || undefined,
@@ -193,34 +191,30 @@ export class ZoteroClient {
 						...headers,
 					},
 				},
-				(res: any) => {
-					const chunks: Uint8Array[] = [];
-					res.on('data', (c: Uint8Array) => chunks.push(c));
+				(res: IncomingMessage) => {
+					const chunks: Buffer[] = [];
+					res.on('data', (chunk: Buffer) => {
+						chunks.push(chunk);
+					});
 					res.on('end', () => {
-						let total = 0;
-						for (const c of chunks) total += c.byteLength;
-						const all = new Uint8Array(total);
-						let off = 0;
-						for (const c of chunks) {
-							all.set(c, off);
-							off += c.byteLength;
-						}
-						const text = new TextDecoder('utf-8').decode(all);
+						const text = Buffer.concat(chunks).toString('utf8');
 						try {
 							this.throwForStatus(res.statusCode ?? 0, url);
 						} catch (e) {
-							reject(e);
+							reject(e instanceof Error ? e : new ApiError(String(e), 'http'));
 							return;
 						}
 						resolve({ status: res.statusCode ?? 0, rawHeaders: res.headers, text });
 					});
-					res.on('error', (e: Error) => reject(new ApiError(`node http response error: ${e.message}`, 'network')));
+					res.on('error', (e: Error) =>
+						reject(new ApiError(`node http response error: ${e.message}`, 'network'))
+					);
 				}
 			);
-			req.setTimeout(20_000, () => req.destroy(new Error('timeout')));
-			req.on('error', (e: { code?: string; message: string }) =>
-				reject(new ApiError(`node http: ${e.code || e.message}`, 'network'))
-			);
+			req.setTimeout(20_000, () => {
+				req.destroy(new Error('timeout'));
+			});
+			req.on('error', (e: Error) => reject(new ApiError(`node http: ${e.message}`, 'network')));
 		});
 	}
 

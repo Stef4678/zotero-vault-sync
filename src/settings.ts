@@ -70,7 +70,7 @@ export const DEFAULT_SETTINGS: ZoteroMirrorSettings = {
 };
 
 export function normalizeSettings(raw: unknown): ZoteroMirrorSettings {
-	const s = { ...DEFAULT_SETTINGS } as ZoteroMirrorSettings;
+	const s = { ...DEFAULT_SETTINGS };
 	if (!raw || typeof raw !== 'object') return s;
 	const r = raw as Record<string, unknown>;
 	if (r.source === 'web' || r.source === 'local') s.source = r.source;
