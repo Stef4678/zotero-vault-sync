@@ -8,6 +8,7 @@ import {
 	TFile,
 	normalizePath,
 } from 'obsidian';
+import { shell } from 'electron';
 import { ZoteroClient } from './api';
 import { ItemPickerModal, referenceCard } from './itemPicker';
 import { Mirror } from './mirror';
@@ -404,11 +405,12 @@ export default class ZoteroMirrorPlugin extends Plugin {
 			return;
 		}
 		const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
-		const key = fm?.['zotero-key'];
-		if (typeof key !== 'string') {
+		const rawKey = fm?.['zotero-key'] as unknown;
+		if (typeof rawKey !== 'string') {
 			new Notice('The active document has no zotero-key frontmatter.', 6000);
 			return;
 		}
+		const key = rawKey;
 		const res = await this.notes.generateNote(key);
 		if (res.status === 'missing') new Notice(res.message, 6000);
 		else if (res.status === 'preserved') new Notice(res.message, 7000);
@@ -443,19 +445,10 @@ export default class ZoteroMirrorPlugin extends Plugin {
 	}
 }
 
-interface ElectronModule {
-	shell?: { openExternal(url: string): Promise<void> | void };
-}
-
 function openExternal(url: string): void {
 	try {
-		const electron = require('electron') as ElectronModule | undefined;
-		if (electron?.shell?.openExternal) {
-			void electron.shell.openExternal(url);
-			return;
-		}
+		void shell.openExternal(url);
 	} catch {
-		/* fall back below */
+		window.open(url, '_blank');
 	}
-	window.open(url, '_blank');
 }

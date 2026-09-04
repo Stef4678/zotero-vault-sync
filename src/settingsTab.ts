@@ -115,7 +115,7 @@ export class ZoteroMirrorSettingTab extends PluginSettingTab {
 			.setName('Clear mirror & re-sync')
 			.setDesc('Deletes all mirrored files (items/, annotations/, index, state) and pulls a full snapshot again.')
 			.addButton((b) =>
-				b.setButtonText('Reset mirror').setDestructive().onClick(async () => {
+				b.setButtonText('Reset mirror').setWarning().onClick(async () => {
 					new ConfirmModal(this.app, 'Reset the Zotero mirror?', 'All files under the mirror folder will be deleted and rebuilt from a full sync. Generated notes are NOT touched.', async () => {
 						await this.plugin.resetMirror();
 					}).open();
@@ -326,7 +326,7 @@ export class ConfirmModal extends Modal {
 			.addButton((b) =>
 				b
 					.setButtonText('Confirm')
-					.setDestructive()
+					.setWarning()
 					.onClick(async () => {
 						this.close();
 						await this.onConfirm();
