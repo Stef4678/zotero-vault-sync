@@ -1,9 +1,9 @@
 {
-	"id": "zotero-mirror",
-	"name": "Zotero Mirror",
+	"id": "zotero-vault-sync",
+	"name": "Zotero Vault Sync",
 	"version": "0.0.3",
 	"minAppVersion": "1.4.0",
 	"description": "Mirror your Zotero library into a git-versioned folder in the vault — one JSON file per item plus per-PDF annotations — synced incrementally via Zotero's local HTTP API, with regenerable notes and Dataview views that work with Zotero closed.",
-	"author": "zotero-mirror",
+	"author": "Kerekes Stefan",
 	"isDesktopOnly": true
 }

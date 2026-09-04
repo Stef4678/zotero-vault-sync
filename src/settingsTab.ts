@@ -105,7 +105,7 @@ export class ZoteroMirrorSettingTab extends PluginSettingTab {
 						s.mirrorFolder = next;
 						await this.plugin.saveSettings();
 						new Notice(
-							`Zotero Mirror: mirror folder changed to “${next}”. The previous folder was left in place; run “Full sync & reconcile” to build the new one.`
+							`Zotero Vault Sync: mirror folder changed to “${next}”. The previous folder was left in place; run “Full sync & reconcile” to build the new one.`
 						);
 					}
 				})
@@ -298,7 +298,7 @@ export class ZoteroMirrorSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl).setName('About').setHeading();
 		containerEl.createEl('p', {
-			text: 'Zotero Mirror keeps a git-versionable copy of your Zotero library in the vault. Everything else — search, generated notes — reads the mirror, so it works with Zotero closed. ',
+			text: 'Zotero Vault Sync keeps a git-versionable copy of your Zotero library in the vault. Everything else — search, generated notes — reads the mirror, so it works with Zotero closed. ',
 			cls: 'setting-item-description',
 		});
 	}

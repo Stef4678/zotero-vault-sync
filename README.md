@@ -1,9 +1,9 @@
-# Zotero Mirror
+# Zotero Vault Sync
 
 A different kind of Zotero plugin for Obsidian.
 
 Instead of "importing" templated markdown snapshots on demand (static, template
-bound, pull-on-demand — like other Zotero plugins), **Zotero Mirror syncs a
+bound, pull-on-demand — like other Zotero plugins), **Zotero Vault Sync syncs a
 database**: it keeps a hidden folder inside your vault that is a live, complete,
 git-versionable mirror of your Zotero library. Every other feature — search,
 generated "note views", annotations, metadata — reads from that mirror, so
@@ -15,11 +15,11 @@ Obsidian*.
 ## Screenshots
 
 <p float="left">
-  <img src="assets/screenshot-settings-1.png" alt="Zotero Mirror settings — part 1" width="46%"/>
-  <img src="assets/screenshot-settings-2.png" alt="Zotero Mirror settings — part 2" width="46%"/>
+  <img src="assets/screenshot-settings-1.png" alt="Zotero Vault Sync settings — part 1" width="46%"/>
+  <img src="assets/screenshot-settings-2.png" alt="Zotero Vault Sync settings — part 2" width="46%"/>
 </p>
 <p float="left">
-  <img src="assets/screenshot-settings-3.png" alt="Zotero Mirror settings — part 3" width="46%"/>
+  <img src="assets/screenshot-settings-3.png" alt="Zotero Vault Sync settings — part 3" width="46%"/>
 </p>
 
 *Everything — connection to Zotero, mirror folder, sync triggers, generated
@@ -29,7 +29,7 @@ notes and Dataview dashboards — is configured from this single settings tab.*
 
 ## Why a mirror?
 
-| | Import plugins (template snapshots) | Zotero Mirror |
+| | Import plugins (template snapshots) | Zotero Vault Sync |
 |---|---|---|
 | Data model | One markdown note per item, created on demand | Full library DB: one JSON file per Zotero item + per-PDF annotation files |
 | Sync | Pull when you ask | Incremental, automatic whenever Zotero changes |
@@ -127,7 +127,7 @@ Zotero client inside Obsidian" means: your vault data, queryable like any other.
 
 The easiest way to "build views with Dataview": let the plugin write them. After
 the **first completed mirror** (or after a reset) it creates three dashboard
-notes — or run *"Zotero Mirror: Create/refresh Dataview views"* any time:
+notes — or run *"Zotero Vault Sync: Create/refresh Dataview views"* any time:
 
 | View note (in `Zotero Views/`) | Renders |
 |---|---|
@@ -155,7 +155,7 @@ are regenerable, so experiments are safe):
 const MIRROR = "_zotero"; // ← your mirror folder from the settings
 async function readJson(p) { try { return JSON.parse(await dv.app.vault.adapter.read(p)); } catch { return null; } }
 const idx = await readJson(MIRROR + "/index.json");
-if (!idx) dv.paragraph("Mirror not synced yet — run “Zotero Mirror: Sync now”.");
+if (!idx) dv.paragraph("Mirror not synced yet — run “Zotero Vault Sync: Sync now”.");
 else {
   const coll = {};
   for (const c of (await readJson(MIRROR + "/collections.json")) ?? []) coll[c.key] = c.name;
@@ -209,7 +209,7 @@ item's mirror JSON file"* opens the raw record in the editor.
 
 | Command | What it does |
 |---|---|
-| **Sync Zotero mirror now** | Incremental pull of everything changed since last sync |
+| **Sync now** | Incremental pull of everything changed since last sync |
 | **Full sync & reconcile mirror** | Re-pulls everything and removes mirrored files deleted in Zotero |
 | **Search Zotero items and insert reference card** | Fuzzy search over the mirror → inserts a reference blockquote into the active note |
 | **Open generated note for a Zotero item** | Picks an item → opens its note view, generating it first if needed |
@@ -241,7 +241,7 @@ note looks like:
 ```
 ---
 zotero-key: ABC123DE
-zotero-mirror: true
+zotero-vault-sync: true
 zotero-item-type: journalArticle
 title: "…"
 updated: "2026-…"
@@ -251,19 +251,19 @@ tags:
 
 [ your own preamble — survives regeneration ]
 
-<!-- zotero-mirror:start -->
+<!-- zotero-vault-sync:start -->
 # Title
 > [!info]- Item
 > **Author, A.** · journalArticle, *Journal*…
 …
-<!-- zotero-mirror:end -->
+<!-- zotero-vault-sync:end -->
 
 [ your own notes after the block — also survives ]
 ```
 
 Default behavior (Overwrite: **region only**) rebuilds *only* the text between
 the markers and updates only the frontmatter keys the plugin manages
-(`zotero-key`, `zotero-mirror`, `zotero-item-type`, `title`, `updated`, `tags`).
+(`zotero-key`, `zotero-vault-sync`, `zotero-item-type`, `title`, `updated`, `tags`).
 Everything else is yours. "Full" overwrite mode exists for people who treat the
 notes as 100% generated.
 
@@ -303,11 +303,11 @@ the vault. The template renders the **body only** (frontmatter is managed).
 ## Install (development build)
 
 1. `npm install && npm run build` in this folder.
-2. Copy the folder (or symlink it) into `<vault>/.obsidian/plugins/zotero-mirror/`
-   and enable **Zotero Mirror** in Settings → Community plugins.
+2. Copy the folder (or symlink it) into `<vault>/.obsidian/plugins/zotero-vault-sync/`
+   and enable **Zotero Vault Sync** in Settings → Community plugins.
 3. In Zotero: Settings → Advanced → tick *"Allow other applications on this
    computer to communicate with Zotero"* (Zotero 7+), then run
-   *Zotero Mirror: Sync now*.
+   *Zotero Vault Sync: Sync now*.
 
 ## Troubleshooting
 
@@ -315,7 +315,7 @@ the vault. The template renders the **body only** (frontmatter is managed).
   Zotero's local server is a minimal HTTP/1.0 server that *closes connections
   carrying browser-style headers* (e.g. `Accept-Encoding: gzip, deflate, br`,
   browser `User-Agent`, `Origin`, `Sec-Fetch-*`), which is exactly what
-  Obsidian's `requestUrl` (Electron/Chromium) sends. Zotero Mirror therefore
+  Obsidian's `requestUrl` (Electron/Chromium) sends. Zotero Vault Sync therefore
   talks to the local API with a plain Node `http` request and a minimal header
   set, and only falls back to `requestUrl` (used for the HTTPS web API). If
   the test still fails: Zotero silently switches to a different port when

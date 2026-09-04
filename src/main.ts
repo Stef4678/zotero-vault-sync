@@ -49,7 +49,7 @@ export default class ZoteroMirrorPlugin extends Plugin {
 		});
 
 		this.registerStatusBar();
-		this.addRibbonIcon('refresh-cw', 'Zotero Mirror: sync now', () => {
+		this.addRibbonIcon('refresh-cw', 'Zotero Vault Sync: sync now', () => {
 			void this.syncFromAction(false);
 		});
 		this.addSettingTab(new ZoteroMirrorSettingTab(this.app, this));
@@ -98,7 +98,7 @@ export default class ZoteroMirrorPlugin extends Plugin {
 	}
 
 	async resetMirror(): Promise<void> {
-		new Notice('Zotero Mirror: resetting mirror…');
+		new Notice('Zotero Vault Sync: resetting mirror…');
 		await this.mirror.load();
 		await this.mirror.reset();
 		await this.syncFromAction(true, 'Reset complete');
@@ -122,7 +122,7 @@ export default class ZoteroMirrorPlugin extends Plugin {
 		const when = res.hadChanges || res.reconciled ? res.message : 'Up to date';
 		const head = prefix ? `${prefix} — ` : '';
 		new Notice(
-			`Zotero Mirror: ${head}${when}. Mirror: ${st.items} items (${st.attachments} PDFs, ${st.annotations} annotations).`,
+			`Zotero Vault Sync: ${head}${when}. Mirror: ${st.items} items (${st.attachments} PDFs, ${st.annotations} annotations).`,
 			6000
 		);
 	}
@@ -142,14 +142,14 @@ export default class ZoteroMirrorPlugin extends Plugin {
 			this.everSyncedOk = true;
 			const st = this.mirror.stats();
 			new Notice(
-				`Zotero Mirror: mirror complete — ${st.items} items, ${st.attachments} PDFs, ${st.notes} notes, ${st.annotations} annotations.`,
+				`Zotero Vault Sync: mirror complete — ${st.items} items, ${st.attachments} PDFs, ${st.notes} notes, ${st.annotations} annotations.`,
 				8000
 			);
 			if (this.settings.viewsAutoCreate) await this.safeCreateViews();
 			return;
 		}
 		if (res.hadChanges) {
-			new Notice(`Zotero Mirror: ${res.message}`, 5000);
+			new Notice(`Zotero Vault Sync: ${res.message}`, 5000);
 		}
 	}
 
@@ -157,8 +157,8 @@ export default class ZoteroMirrorPlugin extends Plugin {
 		try {
 			await this.createViews();
 		} catch (e) {
-			console.error('Zotero Mirror: creating Dataview views failed', e);
-			new Notice(`Zotero Mirror: could not create Dataview views (${(e as Error).message})`, 8000);
+			console.error('Zotero Vault Sync: creating Dataview views failed', e);
+			new Notice(`Zotero Vault Sync: could not create Dataview views (${(e as Error).message})`, 8000);
 		}
 	}
 
@@ -195,7 +195,7 @@ export default class ZoteroMirrorPlugin extends Plugin {
 				created++;
 			}
 		}
-		const parts = [`Zotero Mirror: Dataview views: ${created} created/refreshed`];
+		const parts = [`Zotero Vault Sync: Dataview views: ${created} created/refreshed`];
 		if (preserved) parts.push(`${preserved} preserved (edited)`);
 		parts.push(`in “${folder}”`);
 		if (!hasDataview) parts.push('Dataview not installed — install it to render the views');
@@ -204,7 +204,7 @@ export default class ZoteroMirrorPlugin extends Plugin {
 	}
 
 	private notifyError(message: string): void {
-		const text = `Zotero Mirror: ${message}`;
+		const text = `Zotero Vault Sync: ${message}`;
 		if (this.lastErrorNotice === text) return;
 		this.lastErrorNotice = text;
 		new Notice(text, 10_000);
@@ -244,7 +244,7 @@ export default class ZoteroMirrorPlugin extends Plugin {
 			menu.addItem((i) =>
 				i.setTitle('Settings').setIcon('settings').onClick(() => {
 					(this.app as unknown as { setting: { open(): void; openTabById(id: string): void } }).setting.open();
-					(this.app as unknown as { setting: { open(): void; openTabById(id: string): void } }).setting.openTabById('zotero-mirror');
+					(this.app as unknown as { setting: { open(): void; openTabById(id: string): void } }).setting.openTabById('zotero-vault-sync');
 				})
 			);
 			menu.showAtMouseEvent(ev);
@@ -359,7 +359,7 @@ export default class ZoteroMirrorPlugin extends Plugin {
 			await this.mirror.load();
 			const items = this.mirror.topLevelCitable();
 			if (items.length === 0) {
-				new Notice('Zotero Mirror: the mirror is empty — run “Sync now” first.', 6000);
+				new Notice('Zotero Vault Sync: the mirror is empty — run “Sync now” first.', 6000);
 				return;
 			}
 			new ItemPickerModal(this.app, {
@@ -414,11 +414,11 @@ export default class ZoteroMirrorPlugin extends Plugin {
 		const res = await this.notes.generateNote(key);
 		if (res.status === 'missing') new Notice(res.message, 6000);
 		else if (res.status === 'preserved') new Notice(res.message, 7000);
-		else new Notice(`Zotero Mirror: ${res.message}`, 4000);
+		else new Notice(`Zotero Vault Sync: ${res.message}`, 4000);
 	}
 
 	async refreshAll(createMissing: boolean): Promise<void> {
-		new Notice('Zotero Mirror: generating notes…');
+		new Notice('Zotero Vault Sync: generating notes…');
 		const results = await this.notes.refreshAll(createMissing);
 		let created = 0,
 			refreshed = 0,
@@ -430,7 +430,7 @@ export default class ZoteroMirrorPlugin extends Plugin {
 			else if (r.status === 'preserved') preserved++;
 			else if (r.status === 'missing') missing++;
 		}
-		new Notice(`Zotero Mirror: ${created} created, ${refreshed} refreshed, ${preserved} preserved, ${missing} missing.`, 7000);
+		new Notice(`Zotero Vault Sync: ${created} created, ${refreshed} refreshed, ${preserved} preserved, ${missing} missing.`, 7000);
 	}
 
 	async openMirrorJson(key: string): Promise<void> {
