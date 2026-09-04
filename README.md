@@ -346,4 +346,4 @@ the vault. The template renders the **body only** (frontmatter is managed).
 
 ## License
 
-MIT
+MIT © 2026 Kerekes Stefan
