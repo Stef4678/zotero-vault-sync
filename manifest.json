@@ -3,7 +3,7 @@
 	"name": "Zotero Mirror",
 	"version": "0.0.1",
 	"minAppVersion": "1.4.0",
-	"description": "Mirror your Zotero library into a git-friendly folder in the vault (one JSON file per item, per-PDF annotation files) via Zotero's local HTTP API, syncing incrementally whenever Zotero changes. Generated note 'views' read from the mirror, so they work with Zotero closed.",
+	"description": "Mirror your Zotero library into a git-versioned folder in the vault — one JSON file per item plus per-PDF annotations — synced incrementally via Zotero's local HTTP API, with regenerable notes and Dataview views that work with Zotero closed.",
 	"author": "zotero-mirror",
 	"isDesktopOnly": true
 }

@@ -88,7 +88,7 @@ export class SyncEngine {
 				this.pending = false;
 				const f = this.pendingFull;
 				this.pendingFull = false;
-				setTimeout(() => void this.requestSync(f), 0);
+				window.setTimeout(() => void this.requestSync(f), 0);
 			}
 		}
 	}

@@ -21,8 +21,3 @@
 .zm-status.zm-error {
 	color: var(--text-error);
 }
-
-/* Mirror JSON is data, not prose: keep the editor readable-ish. */
-.cm-editor .cm-line:has(+ .cm-line) {
-	/* no-op; present for future tweaks */
-}

@@ -12,7 +12,7 @@ import { ZoteroClient } from './api';
 import { ItemPickerModal, referenceCard } from './itemPicker';
 import { Mirror } from './mirror';
 import { NotesEngine } from './notes';
-import { EngineStatus, SyncEngine, SyncResult } from './sync';
+import { EngineStatus, SyncEngine } from './sync';
 import { ZoteroMirrorSettings, normalizeSettings } from './settings';
 import { ConfirmModal, ZoteroMirrorSettingTab } from './settingsTab';
 import { buildViewFiles, VIEW_MARKER } from './views';
@@ -293,7 +293,7 @@ export default class ZoteroMirrorPlugin extends Plugin {
 	private registerCommands(): void {
 		this.addCommand({
 			id: 'sync-now',
-			name: 'Sync Zotero mirror now',
+			name: 'Sync now',
 			callback: () => void this.syncFromAction(false),
 		});
 		this.addCommand({

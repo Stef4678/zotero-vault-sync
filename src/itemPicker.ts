@@ -66,7 +66,7 @@ export class ItemPickerModal extends FuzzySuggestModal<ItemSummary> {
 	}
 
 	onOpen(): void {
-		super.onOpen();
+		void super.onOpen();
 		this.titleEl.setText('Zotero items (mirror)');
 	}
 

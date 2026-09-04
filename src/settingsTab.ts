@@ -14,8 +14,6 @@ export class ZoteroMirrorSettingTab extends PluginSettingTab {
 		containerEl.empty();
 		const s = this.plugin.settings;
 
-		new Setting(containerEl).setName('Zotero Mirror').setHeading();
-
 		// ----- data source -----
 		new Setting(containerEl).setName('Data source').setHeading();
 
