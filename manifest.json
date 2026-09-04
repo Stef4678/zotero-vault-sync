@@ -1,7 +1,7 @@
 {
 	"id": "zotero-mirror",
 	"name": "Zotero Mirror",
-	"version": "0.1.0",
+	"version": "0.0.1",
 	"minAppVersion": "1.4.0",
 	"description": "Mirror your Zotero library into a git-friendly folder in the vault (one JSON file per item, per-PDF annotation files) via Zotero's local HTTP API, syncing incrementally whenever Zotero changes. Generated note 'views' read from the mirror, so they work with Zotero closed.",
 	"author": "zotero-mirror",

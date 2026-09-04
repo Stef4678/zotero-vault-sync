@@ -1,6 +1,6 @@
 {
   "name": "obsidian-zotero-mirror",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Mirror your Zotero library into a git-friendly folder inside the vault (one JSON file per item, per-PDF annotation files) and generate regenerable note views over the mirror.",
   "main": "main.js",
   "scripts": {
