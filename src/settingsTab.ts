@@ -1,6 +1,16 @@
 import { App, Modal, Notice, PluginSettingTab, Setting } from 'obsidian';
+import type { SettingDefinitionItem } from 'obsidian';
 import type ZoteroMirrorPlugin from './main';
-import { DEFAULT_SETTINGS, ZoteroMirrorSettings, normalizeSettings, sourceLabel } from './settings';
+import { DEFAULT_SETTINGS, normalizeSettings, sourceLabel } from './settings';
+
+/** Folder settings: trimmed, without surrounding slashes, falling back to the default. */
+const FOLDER_FALLBACKS: Record<string, string> = {
+	mirrorFolder: DEFAULT_SETTINGS.mirrorFolder,
+	noteFolder: DEFAULT_SETTINGS.noteFolder,
+	viewsFolder: DEFAULT_SETTINGS.viewsFolder,
+};
+
+const TRIMMED_KEYS = ['webUserId', 'webApiKey', 'noteTemplatePath'];
 
 export class ZoteroMirrorSettingTab extends PluginSettingTab {
 	private connResult = '';
@@ -9,297 +19,264 @@ export class ZoteroMirrorSettingTab extends PluginSettingTab {
 		super(app, plugin);
 	}
 
-	display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
-		const s = this.plugin.settings;
-
-		// ----- data source -----
-		new Setting(containerEl).setName('Data source').setHeading();
-
-		new Setting(containerEl)
-			.setName('Source')
-			.setDesc(
-				'“Zotero desktop” talks to Zotero’s local HTTP API (localhost:23119) — offline, no API key. ' +
-					'“zotero.org” syncs through the web API (needs an API key, works even when the Zotero app is closed).'
-			)
-			.addDropdown((dd) =>
-				dd
-					.addOption('local', 'Zotero desktop (local API)')
-					.addOption('web', 'zotero.org (Web API)')
-					.setValue(s.source)
-					.onChange(async (v) => {
-						this.plugin.settings.source = v as ZoteroMirrorSettings['source'];
-						await this.plugin.saveSettings();
-						this.display();
-					})
-			);
-
-		if (s.source === 'local') {
-			new Setting(containerEl)
-				.setName('Local API base URL')
-				.setDesc(
-					'Zotero must be running with “Allow other applications on this computer to communicate with Zotero” enabled ' +
-						'(Zotero → Settings → Advanced). Keep the default unless your setup differs.'
-				)
-				.addText((t) =>
-					t
-						.setPlaceholder(DEFAULT_SETTINGS.localApiUrl)
-						.setValue(s.localApiUrl)
-						.onChange(async (v) => {
-							this.plugin.settings.localApiUrl = v.replace(/\/+$/, '') || DEFAULT_SETTINGS.localApiUrl;
-							await this.plugin.saveSettings();
-						})
-				);
-		} else {
-			new Setting(containerEl)
-				.setName('User ID')
-				.setDesc('Numeric Zotero user id (see zotero.org/settings/keys).')
-				.addText((t) =>
-					t.setValue(s.webUserId).onChange(async (v) => {
-						this.plugin.settings.webUserId = v.trim();
-						await this.plugin.saveSettings();
-					})
-				);
-			new Setting(containerEl)
-				.setName('API key')
-				.setDesc('A zotero.org API key with library read access (Settings → Keys in your zotero.org account).')
-				.addText((t) => {
-					t.inputEl.type = 'password';
-					t.setValue(s.webApiKey).onChange(async (v) => {
-						this.plugin.settings.webApiKey = v.trim();
-						await this.plugin.saveSettings();
-					});
-				});
+	/**
+	 * Normalize a value before it is written to `plugin.settings`. The declarative
+	 * bindings write raw input, so a half-typed folder would otherwise reach the
+	 * mirror as-is until the next reload (`normalizeSettings` only runs on load).
+	 */
+	private normalizeValue(key: string, value: unknown): unknown {
+		if (typeof value !== 'string') return value;
+		if (key === 'localApiUrl') return value.replace(/\/+$/, '') || DEFAULT_SETTINGS.localApiUrl;
+		if (key in FOLDER_FALLBACKS) {
+			const folder = value.trim().replace(/^\/+|\/+$/g, '');
+			return folder || FOLDER_FALLBACKS[key];
 		}
+		if (TRIMMED_KEYS.includes(key)) return value.trim();
+		return value;
+	}
 
-		new Setting(containerEl)
-			.setName('Test connection')
-			.setDesc(this.connResult || `Reads the source at ${sourceLabel(s)}.`)
-			.addButton((b) =>
-				b.setButtonText('Test').onClick(async () => {
-					b.setDisabled(true);
-					b.setButtonText('Testing…');
-					const ping = await this.plugin.client.ping();
-					b.setDisabled(false);
-					b.setButtonText('Test');
-					this.connResult = ping.message;
-					new Notice(ping.message, ping.ok ? 4000 : 9000);
-					this.display();
-				})
+	async setControlValue(key: string, value: unknown): Promise<void> {
+		const mirrorBefore = this.plugin.settings.mirrorFolder;
+		await super.setControlValue(key, this.normalizeValue(key, value));
+		// Obsidian re-evaluates predicates after a control change; be explicit for
+		// the one that gates the local/web rows so they can't go stale.
+		if (key === 'source') this.refreshDomState();
+		if (key === 'mirrorFolder' && this.plugin.settings.mirrorFolder !== mirrorBefore) {
+			new Notice(
+				`Zotero Vault Sync: mirror folder changed to “${this.plugin.settings.mirrorFolder}”. ` +
+					'The previous folder was left in place; run “Full sync & reconcile” to build the new one.'
 			);
+		}
+	}
 
-		// ----- mirror -----
-		new Setting(containerEl).setName('Mirror folder').setHeading();
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		const s = this.plugin.settings;
+		const isLocal = (): boolean => this.plugin.settings.source === 'local';
+		const isWeb = (): boolean => this.plugin.settings.source === 'web';
 
-		new Setting(containerEl)
-			.setName('Mirror folder')
-			.setDesc(
-				'Vault folder holding the mirror (items/<key>.json, annotations/<key>.json, index.json, …). ' +
-					'A leading dot (e.g. `.zotero`) hides it from Obsidian’s file explorer; a leading underscore (`_zotero`) keeps it visible.'
-			)
-			.addText((t) =>
-				t.setValue(s.mirrorFolder).onChange(async (v) => {
-					const next = (v.trim() || '_zotero').replace(/^\/+|\/+$/g, '');
-					if (next !== s.mirrorFolder) {
-						s.mirrorFolder = next;
-						await this.plugin.saveSettings();
-						new Notice(
-							`Zotero Vault Sync: mirror folder changed to “${next}”. The previous folder was left in place; run “Full sync & reconcile” to build the new one.`
-						);
-					}
-				})
-			);
-
-		new Setting(containerEl)
-			.setName('Clear mirror & re-sync')
-			.setDesc('Deletes all mirrored files (items/, annotations/, index, state) and pulls a full snapshot again.')
-			.addButton((b) =>
-				b.setButtonText('Reset mirror').setWarning().onClick(async () => {
-					new ConfirmModal(this.app, 'Reset the Zotero mirror?', 'All files under the mirror folder will be deleted and rebuilt from a full sync. Generated notes are NOT touched.', async () => {
-						await this.plugin.resetMirror();
-					}).open();
-				})
-			);
-
-		// ----- sync triggers -----
-		new Setting(containerEl).setName('Sync triggers').setHeading();
-
-		new Setting(containerEl)
-			.setName('Sync on startup')
-			.setDesc('Run a sync a few seconds after Obsidian opens.')
-			.addToggle((t) =>
-				t.setValue(s.syncOnStartup).onChange(async (v) => {
-					s.syncOnStartup = v;
-					await this.plugin.saveSettings();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName('Sync when the window regains focus')
-			.addToggle((t) =>
-				t.setValue(s.syncOnWindowFocus).onChange(async (v) => {
-					s.syncOnWindowFocus = v;
-					await this.plugin.saveSettings();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName('Poll interval (seconds)')
-			.setDesc('How often changes are pulled from Zotero while Obsidian is running. 0 disables polling. Zotero’s local API only serves new objects since the last sync, so this is cheap.')
-			.addText((t) =>
-				t
-					.setValue(String(s.pollIntervalSeconds))
-					.onChange(async (v) => {
-						const n = parseInt(v, 10);
-						s.pollIntervalSeconds = Number.isFinite(n) && n >= 0 ? n : DEFAULT_SETTINGS.pollIntervalSeconds;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName('Deletion reconcile interval (minutes)')
-			.setDesc(
-				'Incremental syncs cannot see deletions, so the mirror periodically pulls a full snapshot and removes vanished items/annotations. 0 = only on startup and manual full syncs.'
-			)
-			.addText((t) =>
-				t
-					.setValue(String(s.reconcileMinutes))
-					.onChange(async (v) => {
-						const n = parseInt(v, 10);
-						s.reconcileMinutes = Number.isFinite(n) && n >= 0 ? n : DEFAULT_SETTINGS.reconcileMinutes;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		// ----- generated notes -----
-		new Setting(containerEl).setName('Generated note views').setHeading();
-
-		new Setting(containerEl)
-			.setName('Notes folder')
-			.setDesc('Where regenerable note views are created (outside the mirror).')
-			.addText((t) =>
-				t.setValue(s.noteFolder).onChange(async (v) => {
-					s.noteFolder = (v.trim() || DEFAULT_SETTINGS.noteFolder).replace(/^\/+|\/+$/g, '');
-					await this.plugin.saveSettings();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName('Custom template')
-			.setDesc('Optional vault path to a markdown template. See README for tokens ({{title}}, {{#attachments}}…{{/attachments}}, …).')
-			.addText((t) =>
-				t.setValue(s.noteTemplatePath).onChange(async (v) => {
-					s.noteTemplatePath = v.trim();
-					await this.plugin.saveSettings();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName('Overwrite behavior')
-			.setDesc('“Region only” rebuilds the text between the generated markers and preserves your edits elsewhere. “Full” replaces the whole file.')
-			.addDropdown((dd) =>
-				dd
-					.addOption('region', 'Region only (preserve edits)')
-					.addOption('full', 'Full file (destructive)')
-					.setValue(s.noteOverwrite)
-					.onChange(async (v) => {
-						s.noteOverwrite = v as ZoteroMirrorSettings['noteOverwrite'];
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName('Include child notes')
-			.setDesc('Quote the Zotero notes attached to an item into its generated note.')
-			.addToggle((t) =>
-				t.setValue(s.includeChildNotes).onChange(async (v) => {
-					s.includeChildNotes = v;
-					await this.plugin.saveSettings();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName('Include attachments')
-			.setDesc('One section per attachment (PDF) in the generated note.')
-			.addToggle((t) =>
-				t.setValue(s.includeAttachments).onChange(async (v) => {
-					s.includeAttachments = v;
-					await this.plugin.saveSettings();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName('Include PDF annotations')
-			.setDesc('List highlights and comments inside each attachment section. Has no effect while “Include attachments” is off.')
-			.addToggle((t) =>
-				t.setValue(s.includeAnnotations).onChange(async (v) => {
-					s.includeAnnotations = v;
-					await this.plugin.saveSettings();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName('Annotation preview length')
-			.setDesc('Truncate long highlight quotes inside generated notes (0 = keep full text).')
-			.addText((t) =>
-				t
-					.setValue(String(s.noteAnnotationPreviewLength))
-					.onChange(async (v) => {
-						const n = parseInt(v, 10);
-						s.noteAnnotationPreviewLength = Number.isFinite(n) && n >= 0 ? n : DEFAULT_SETTINGS.noteAnnotationPreviewLength;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName('Max creators per citation')
-			.addText((t) =>
-				t
-					.setValue(String(s.noteMaxCreators))
-					.onChange(async (v) => {
-						const n = parseInt(v, 10);
-						s.noteMaxCreators = Number.isFinite(n) && n > 0 ? n : DEFAULT_SETTINGS.noteMaxCreators;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		// ----- dataview views -----
-		new Setting(containerEl).setName('Dataview views').setHeading();
-
-		new Setting(containerEl)
-			.setName('Views folder')
-			.setDesc(
-				'Regenerable dashboard notes containing dataviewjs queries over the mirror: items table, PDFs & annotations, library stats. Requires the Dataview community plugin to render.'
-			)
-			.addText((t) =>
-				t.setValue(s.viewsFolder).onChange(async (v) => {
-					s.viewsFolder = (v.trim() || DEFAULT_SETTINGS.viewsFolder).replace(/^\/+|\/+$/g, '');
-					await this.plugin.saveSettings();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName('Create views automatically after the first mirror')
-			.setDesc('When the mirror is first populated (or re-populated after a reset), write the three view notes.')
-			.addToggle((t) =>
-				t.setValue(s.viewsAutoCreate).onChange(async (v) => {
-					s.viewsAutoCreate = v;
-					await this.plugin.saveSettings();
-				})
-			);
-
-		new Setting(containerEl).addButton((b) =>
-			b.setButtonText('Create / refresh views now').onClick(async () => {
-				await this.plugin.createViews();
-			})
-		);
-
-		new Setting(containerEl).setName('About').setHeading();
-		containerEl.createEl('p', {
-			text: 'Zotero Vault Sync keeps a git-versionable copy of your Zotero library in the vault. Everything else — search, generated notes — reads the mirror, so it works with Zotero closed. ',
-			cls: 'setting-item-description',
-		});
+		return [
+			{
+				type: 'group',
+				heading: 'Data source',
+				items: [
+					{
+						name: 'Source',
+						desc:
+							'“Zotero desktop” talks to Zotero’s local HTTP API (localhost:23119) — offline, no API key. ' +
+							'“zotero.org” syncs through the web API (needs an API key, works even when the Zotero app is closed).',
+						control: {
+							type: 'dropdown',
+							key: 'source',
+							options: {
+								local: 'Zotero desktop (local API)',
+								web: 'zotero.org (Web API)',
+							},
+						},
+					},
+					{
+						name: 'Local API base URL',
+						desc:
+							'Zotero must be running with “Allow other applications on this computer to communicate with Zotero” enabled ' +
+							'(Zotero → Settings → Advanced). Keep the default unless your setup differs.',
+						visible: isLocal,
+						control: { type: 'text', key: 'localApiUrl', placeholder: DEFAULT_SETTINGS.localApiUrl },
+					},
+					{
+						name: 'User ID',
+						desc: 'Numeric Zotero user id (see zotero.org/settings/keys).',
+						visible: isWeb,
+						control: { type: 'text', key: 'webUserId' },
+					},
+					{
+						name: 'API key',
+						desc: 'A zotero.org API key with library read access (Settings → Keys in your zotero.org account).',
+						visible: isWeb,
+						render: (setting) => {
+							// No declarative control masks input, so build the row by hand
+							// and persist explicitly (render callbacks don't auto-save).
+							setting.addText((t) => {
+								t.inputEl.type = 'password';
+								t.setValue(this.plugin.settings.webApiKey).onChange(async (v) => {
+									this.plugin.settings.webApiKey = v.trim();
+									await this.plugin.saveSettings();
+								});
+							});
+						},
+					},
+					{
+						name: 'Test connection',
+						desc: this.connResult || `Reads the source at ${sourceLabel(s)}.`,
+						render: (setting) => {
+							setting.addButton((b) =>
+								b.setButtonText('Test').onClick(async () => {
+									b.setDisabled(true);
+									b.setButtonText('Testing…');
+									const ping = await this.plugin.client.ping();
+									b.setDisabled(false);
+									b.setButtonText('Test');
+									this.connResult = ping.message;
+									new Notice(ping.message, ping.ok ? 4000 : 9000);
+									// Rebuilds the definitions so the result shows in `desc`.
+									this.update();
+								})
+							);
+						},
+					},
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Mirror',
+				items: [
+					{
+						name: 'Mirror folder',
+						desc:
+							'Vault folder holding the mirror (items/<key>.json, annotations/<key>.json, index.json, …). ' +
+							'A leading dot (e.g. `.zotero`) hides it from Obsidian’s file explorer; a leading underscore (`_zotero`) keeps it visible.',
+						control: { type: 'text', key: 'mirrorFolder' },
+					},
+					{
+						name: 'Clear mirror & re-sync',
+						desc: 'Deletes all mirrored files (items/, annotations/, index, state) and pulls a full snapshot again.',
+						render: (setting) => {
+							setting.addButton((b) =>
+								b.setButtonText('Reset mirror').setDestructive().onClick(() => {
+									new ConfirmModal(
+										this.app,
+										'Reset the Zotero mirror?',
+										'All files under the mirror folder will be deleted and rebuilt from a full sync. Generated notes are NOT touched.',
+										async () => {
+											await this.plugin.resetMirror();
+										}
+									).open();
+								})
+							);
+						},
+					},
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Sync triggers',
+				items: [
+					{
+						name: 'Sync on startup',
+						desc: 'Run a sync a few seconds after Obsidian opens.',
+						control: { type: 'toggle', key: 'syncOnStartup' },
+					},
+					{
+						name: 'Sync when the window regains focus',
+						desc: 'Pull changes as soon as you come back to Obsidian.',
+						control: { type: 'toggle', key: 'syncOnWindowFocus' },
+					},
+					{
+						name: 'Poll interval (seconds)',
+						desc:
+							'How often changes are pulled from Zotero while Obsidian is running. 0 disables polling. Zotero’s local API only serves new objects since the last sync, so this is cheap.',
+						control: { type: 'number', key: 'pollIntervalSeconds', min: 0, defaultValue: DEFAULT_SETTINGS.pollIntervalSeconds },
+					},
+					{
+						name: 'Deletion reconcile interval (minutes)',
+						desc:
+							'Incremental syncs cannot see deletions, so the mirror periodically pulls a full snapshot and removes vanished items/annotations. 0 = only on startup and manual full syncs.',
+						control: { type: 'number', key: 'reconcileMinutes', min: 0, defaultValue: DEFAULT_SETTINGS.reconcileMinutes },
+					},
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Generated note views',
+				items: [
+					{
+						name: 'Notes folder',
+						desc: 'Where regenerable note views are created (outside the mirror).',
+						control: { type: 'text', key: 'noteFolder' },
+					},
+					{
+						name: 'Custom template',
+						desc: 'Optional vault path to a markdown template. See README for tokens ({{title}}, {{#attachments}}…{{/attachments}}, …).',
+						control: { type: 'text', key: 'noteTemplatePath' },
+					},
+					{
+						name: 'Overwrite behavior',
+						desc: '“Region only” rebuilds the text between the generated markers and preserves your edits elsewhere. “Full” replaces the whole file.',
+						control: {
+							type: 'dropdown',
+							key: 'noteOverwrite',
+							options: {
+								region: 'Region only (preserve edits)',
+								full: 'Full file (destructive)',
+							},
+						},
+					},
+					{
+						name: 'Include child notes',
+						desc: 'Quote the Zotero notes attached to an item into its generated note.',
+						control: { type: 'toggle', key: 'includeChildNotes' },
+					},
+					{
+						name: 'Include attachments',
+						desc: 'One section per attachment (PDF) in the generated note.',
+						control: { type: 'toggle', key: 'includeAttachments' },
+					},
+					{
+						name: 'Include PDF annotations',
+						desc: 'List highlights and comments inside each attachment section. Has no effect while “Include attachments” is off.',
+						control: { type: 'toggle', key: 'includeAnnotations' },
+					},
+					{
+						name: 'Annotation preview length',
+						desc: 'Truncate long highlight quotes inside generated notes (0 = keep full text).',
+						control: {
+							type: 'number',
+							key: 'noteAnnotationPreviewLength',
+							min: 0,
+							defaultValue: DEFAULT_SETTINGS.noteAnnotationPreviewLength,
+						},
+					},
+					{
+						name: 'Max creators per citation',
+						desc: 'Authors listed before “et al.” in the generated citation.',
+						control: { type: 'number', key: 'noteMaxCreators', min: 1, defaultValue: DEFAULT_SETTINGS.noteMaxCreators },
+					},
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Dataview views',
+				items: [
+					{
+						name: 'Views folder',
+						desc:
+							'Regenerable dashboard notes containing dataviewjs queries over the mirror: items table, PDFs & annotations, library stats. Requires the Dataview community plugin to render.',
+						control: { type: 'text', key: 'viewsFolder' },
+					},
+					{
+						name: 'Create views automatically after the first mirror',
+						desc: 'When the mirror is first populated (or re-populated after a reset), write the three view notes.',
+						control: { type: 'toggle', key: 'viewsAutoCreate' },
+					},
+					{
+						name: 'Create or refresh views now',
+						desc: 'Write the three Dataview dashboard notes into the views folder.',
+						action: () => {
+							void this.plugin.createViews();
+						},
+					},
+				],
+			},
+			{
+				type: 'group',
+				heading: 'About',
+				items: [
+					{
+						name: 'Zotero Vault Sync',
+						desc:
+							'Keeps a git-versionable copy of your Zotero library in the vault. Everything else — search, generated notes — reads the mirror, so it works with Zotero closed.',
+					},
+				],
+			},
+		];
 	}
 }
 
@@ -325,7 +302,7 @@ export class ConfirmModal extends Modal {
 			.addButton((b) =>
 				b
 					.setButtonText('Confirm')
-					.setWarning()
+					.setDestructive()
 					.onClick(async () => {
 						this.close();
 						await this.onConfirm();
