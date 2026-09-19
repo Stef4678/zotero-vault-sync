@@ -4,8 +4,21 @@
  * `esbuild test/harness.ts` against test/stub-obsidian.ts.
  */
 import { parseTemplate, renderTemplate, TemplateScope } from '../src/template';
-import { patchFrontmatter, MARK_START, MARK_END } from '../src/notes';
-import { creatorsText, htmlToText, itemDisplayTitle, sanitizeFilename, summarizeItem, truncate, yearFromDate } from '../src/util';
+import { App } from 'obsidian';
+import { patchFrontmatter, MARK_START, MARK_END, DEFAULT_TEMPLATE, NotesEngine } from '../src/notes';
+import {
+	creatorsText,
+	htmlToText,
+	itemDisplayTitle,
+	sanitizeFilename,
+	summarizeItem,
+	truncate,
+	yearFromDate,
+	zoteroItemLink,
+	zoteroItemUri,
+} from '../src/util';
+import { referenceCard } from '../src/itemPicker';
+import { ItemSummary } from '../src/types';
 import { naiveCitation } from '../src/notes';
 import { ZoteroItem } from '../src/types';
 import { DEFAULT_SETTINGS } from '../src/settings';
@@ -146,6 +159,47 @@ console.log('util');
 	check('summary keyed', s.key === 'K1' && s.itemType === 'attachment' && s.parentItem === 'P1');
 }
 
+// ---------------------------------------------------------------- zotero links
+console.log('zotero:// links');
+{
+	// Regression: the legacy `zotero://select/items/<key>` route is not recognised
+	// by current Zotero — it launches the app but selects nothing. Only
+	// `select/library/items/<key>` actually selects the item.
+	check('item URI uses the select/library route', zoteroItemUri('ABC123DE') === 'zotero://select/library/items/ABC123DE');
+	check('no legacy select/items route', !zoteroItemUri('ABC123DE').includes('select/items/'));
+	check('item link is a markdown link', zoteroItemLink('ABC123DE') === '[ABC123DE](zotero://select/library/items/ABC123DE)');
+
+	const summary: ItemSummary = {
+		key: 'ABC123DE',
+		version: 3,
+		itemType: 'journalArticle',
+		title: 'A study',
+		creators: 'Doe, Jane',
+		year: '2020',
+		date: '2020-05-01',
+		parentItem: null,
+		collections: [],
+		tags: ['methods'],
+	};
+	const card = referenceCard(summary, DEFAULT_SETTINGS);
+	check('reference card links with the working URI', card.includes('[Zotero](zotero://select/library/items/ABC123DE)'));
+	check('reference card has no legacy URI', !card.includes('zotero://select/items/'));
+
+	// Regression: the token is already a markdown link, so the default template
+	// must interpolate it bare — wrapping it in `[Open in Zotero](…)` produced the
+	// malformed target `]([KEY](zotero://…))`, which is not a clickable link.
+	const rendered = renderTemplate(DEFAULT_TEMPLATE, {
+		tokens: {
+			title: 'A study',
+			zoteroLink: zoteroItemLink('ABC123DE'),
+			mirrorLink: '[[_zotero/items/ABC123DE.json|item JSON]]',
+		},
+	});
+	check('default template keeps the Zotero link well-formed', rendered.includes('](zotero://select/library/items/ABC123DE)'));
+	check('default template does not nest link syntax', !rendered.includes('](['));
+	check('default template still shows the item key', rendered.includes('[ABC123DE](zotero://select/library/items/ABC123DE)'));
+}
+
 // ---------------------------------------------------------------- citation
 console.log('citation');
 {
@@ -177,5 +231,97 @@ console.log('citation');
 	check('citation has volume issue pages', cite.includes('12') && cite.includes('(3)') && cite.includes('10-20'));
 }
 
-console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURES`);
-process.exit(failures === 0 ? 0 : 1);
+// ------------------------------------------------- generated note body (async)
+// Regression: includeAnnotations used to be a dead setting — the toggle wrote it,
+// nothing read it, and highlights appeared regardless. It must now gate the
+// annotation list, and excluding annotations must not print the "no annotations"
+// placeholder either.
+void (async () => {
+	console.log('generated note body');
+	const attachment: ZoteroItem = {
+		key: 'ATT00001',
+		version: 1,
+		data: {
+			key: 'ATT00001',
+			version: 1,
+			itemType: 'attachment',
+			filename: 'paper.pdf',
+			contentType: 'application/pdf',
+			parentItem: 'ABC123DE',
+			collections: [],
+			tags: [],
+			relations: {},
+		},
+	};
+	const annotation: ZoteroItem = {
+		key: 'ANN00001',
+		version: 1,
+		data: {
+			key: 'ANN00001',
+			version: 1,
+			itemType: 'annotation',
+			parentItem: 'ATT00001',
+			annotationText: 'A highlighted sentence',
+			annotationComment: 'my comment',
+			annotationColor: '#ffd400',
+			annotationPageLabel: '3',
+			collections: [],
+			tags: [],
+			relations: {},
+		},
+	};
+	const fakeMirror = {
+		childRecords: async (key: string) =>
+			key === 'ABC123DE' ? [{ item: attachment }] : key === 'ATT00001' ? [{ item: annotation }] : [],
+		collectionName: (_key: string) => null,
+	};
+	const record: ZoteroItem = {
+		key: 'ABC123DE',
+		version: 3,
+		data: {
+			key: 'ABC123DE',
+			version: 3,
+			itemType: 'journalArticle',
+			title: 'A study',
+			creators: [{ creatorType: 'author', firstName: 'Jane', lastName: 'Doe' }],
+			date: '2020-05-01',
+			collections: [],
+			tags: [],
+			relations: {},
+		},
+	};
+	const summary: ItemSummary = {
+		key: 'ABC123DE',
+		version: 3,
+		itemType: 'journalArticle',
+		title: 'A study',
+		creators: 'Doe, Jane',
+		year: '2020',
+		date: '2020-05-01',
+		parentItem: null,
+		collections: [],
+		tags: [],
+	};
+	const render = (settings: typeof DEFAULT_SETTINGS): Promise<string> => {
+		const e = new NotesEngine(new App() as never, fakeMirror as never, () => settings);
+		return (e as unknown as { renderBody(s: ItemSummary, r: ZoteroItem): Promise<string> }).renderBody(
+			summary,
+			record
+		);
+	};
+
+
+	const withAnn = await render({ ...DEFAULT_SETTINGS, includeAttachments: true, includeAnnotations: true });
+	check('annotations rendered when enabled', withAnn.includes('A highlighted sentence') && withAnn.includes('paper.pdf'));
+
+	const withoutAnn = await render({ ...DEFAULT_SETTINGS, includeAttachments: true, includeAnnotations: false });
+	check('annotations omitted when disabled', !withoutAnn.includes('A highlighted sentence'));
+	check('no empty-annotations placeholder when disabled', !withoutAnn.includes('No annotations'));
+	check('attachment section still rendered when annotations disabled', withoutAnn.includes('paper.pdf'));
+
+	const noAttachments = await render({ ...DEFAULT_SETTINGS, includeAttachments: false, includeAnnotations: true });
+	check('attachments omitted when disabled', !noAttachments.includes('paper.pdf') && !noAttachments.includes('A highlighted sentence'));
+
+	console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURES`);
+	process.exit(failures === 0 ? 0 : 1);
+})();

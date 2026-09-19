@@ -210,34 +210,33 @@ export class ZoteroMirrorSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName('Include in generated notes')
-			.setDesc('Child Zotero notes, attachments and PDF annotations.')
+			.setName('Include child notes')
+			.setDesc('Quote the Zotero notes attached to an item into its generated note.')
 			.addToggle((t) =>
-				t
-					.setValue(s.includeChildNotes)
-					.setTooltip('Child notes')
-					.onChange(async (v) => {
-						s.includeChildNotes = v;
-						await this.plugin.saveSettings();
-					})
-			)
+				t.setValue(s.includeChildNotes).onChange(async (v) => {
+					s.includeChildNotes = v;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName('Include attachments')
+			.setDesc('One section per attachment (PDF) in the generated note.')
 			.addToggle((t) =>
-				t
-					.setValue(s.includeAttachments)
-					.setTooltip('Attachments')
-					.onChange(async (v) => {
-						s.includeAttachments = v;
-						await this.plugin.saveSettings();
-					})
-			)
+				t.setValue(s.includeAttachments).onChange(async (v) => {
+					s.includeAttachments = v;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName('Include PDF annotations')
+			.setDesc('List highlights and comments inside each attachment section. Has no effect while “Include attachments” is off.')
 			.addToggle((t) =>
-				t
-					.setValue(s.includeAnnotations)
-					.setTooltip('Annotations')
-					.onChange(async (v) => {
-						s.includeAnnotations = v;
-						await this.plugin.saveSettings();
-					})
+				t.setValue(s.includeAnnotations).onChange(async (v) => {
+					s.includeAnnotations = v;
+					await this.plugin.saveSettings();
+				})
 			);
 
 		new Setting(containerEl)

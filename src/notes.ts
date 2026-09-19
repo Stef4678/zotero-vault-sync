@@ -13,6 +13,8 @@ import {
 	sanitizeFilename,
 	truncate,
 	yearFromDate,
+	zoteroItemLink,
+	zoteroItemUri,
 } from './util';
 
 export const MARK_START = '<!-- zotero-vault-sync:start -->';
@@ -167,13 +169,13 @@ export function naiveCitation(record: ZoteroItem, summary: ItemSummary | undefin
 	return cite;
 }
 
-const DEFAULT_TEMPLATE = `# {{title}}
+export const DEFAULT_TEMPLATE = `# {{title}}
 
 > [!info]- Item
 > {{#creatorList}}**{{creatorList}}** · {{/creatorList}}{{itemTypeLabel}}{{#publicationTitle}}, *{{publicationTitle}}*{{/publicationTitle}}{{#date}}, {{date}}{{/date}}
 > {{#doi}}DOI: [{{doi}}](https://doi.org/{{doi}}){{/doi}}{{#url}} · [Link]({{url}}){{/url}}
 > Collections: {{collections}} · Tags: {{tags}}
-> [Open in Zotero]({{zoteroLink}}) · {{mirrorLink}}
+> {{zoteroLink}} · {{mirrorLink}}
 
 {{#abstract}}
 **Abstract.** {{abstract}}
@@ -382,7 +384,7 @@ export class NotesEngine {
 			url: d.url ?? '',
 			collections,
 			tags: tags.join(', '),
-			zoteroLink: `[${summary.key}](zotero://select/items/${summary.key})`,
+			zoteroLink: zoteroItemLink(summary.key),
 			mirrorLink: `[[${mirrorJsonRel}|item JSON]]`,
 			citation: naiveCitation(record, summary, settings),
 		};
@@ -417,31 +419,36 @@ export class NotesEngine {
 			if (cdata.itemType === 'note' && settings.includeChildNotes) {
 				childNotes.push({ tokens: { content: truncate(htmlToText(cdata.note), 3000) } });
 			} else if (cdata.itemType === 'attachment' && settings.includeAttachments) {
-				const annChildren = (await this.mirror.childRecords(child.item.key)).filter(
-					(c) => c.item.data.itemType === 'annotation'
-				);
 				const annotations: TemplateElement[] = [];
-				for (const a of annChildren) {
-					const ad = a.item.data;
-					annotations.push({
-						tokens: {
-							colorEmoji: colorEmoji(ad.annotationColor),
-							colorName: colorLabel(ad.annotationColor),
-							pageLabel: ad.annotationPageLabel ?? '',
-							text: truncate(ad.annotationText ?? '', settings.noteAnnotationPreviewLength),
-							comment: ad.annotationComment ?? '',
-						},
-					});
+				if (settings.includeAnnotations) {
+					const annChildren = (await this.mirror.childRecords(child.item.key)).filter(
+						(c) => c.item.data.itemType === 'annotation'
+					);
+					for (const a of annChildren) {
+						const ad = a.item.data;
+						annotations.push({
+							tokens: {
+								colorEmoji: colorEmoji(ad.annotationColor),
+								colorName: colorLabel(ad.annotationColor),
+								pageLabel: ad.annotationPageLabel ?? '',
+								text: truncate(ad.annotationText ?? '', settings.noteAnnotationPreviewLength),
+								comment: ad.annotationComment ?? '',
+							},
+						});
+					}
 				}
 				attachments.push({
 					tokens: {
 						filename: cdata.filename || cdata.title || child.item.key,
 						contentType: cdata.contentType || 'file',
-						attachmentLink: `zotero://select/items/${child.item.key}`,
+						attachmentLink: zoteroItemUri(child.item.key),
 					},
 					lists: {
 						annotations,
-						annotationsEmpty: annotations.length ? [] : [{ tokens: {} }],
+						// Excluding annotations should print nothing under an attachment —
+						// not the "no annotations" placeholder, which would be a lie.
+						annotationsEmpty:
+							settings.includeAnnotations && annotations.length === 0 ? [{ tokens: {} }] : [],
 					},
 				});
 			}

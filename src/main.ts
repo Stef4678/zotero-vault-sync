@@ -17,7 +17,7 @@ import { EngineStatus, SyncEngine } from './sync';
 import { ZoteroMirrorSettings, normalizeSettings } from './settings';
 import { ConfirmModal, ZoteroMirrorSettingTab } from './settingsTab';
 import { buildViewFiles, VIEW_MARKER } from './views';
-import { fmtTime, truncate } from './util';
+import { fmtTime, truncate, zoteroItemUri } from './util';
 
 export default class ZoteroMirrorPlugin extends Plugin {
 	settings!: ZoteroMirrorSettings;
@@ -372,7 +372,7 @@ export default class ZoteroMirrorPlugin extends Plugin {
 					} else if (action === 'open-note') {
 						void this.openOrCreateNote(item.key);
 					} else if (action === 'open-in-zotero') {
-						openExternal(`zotero://select/items/${item.key}`);
+						openExternal(zoteroItemUri(item.key));
 					} else if (action === 'open-mirror-json') {
 						void this.openMirrorJson(item.key);
 					}

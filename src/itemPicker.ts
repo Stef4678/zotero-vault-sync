@@ -16,7 +16,7 @@ export function referenceCard(s: ItemSummary, settings: ZoteroMirrorSettings): s
 	if (creatorBit && yearBit) lines.push(`> ${creatorBit}${yearBit}`);
 	if (s.tags.length) lines.push(`> Tags: ${s.tags.map((t) => `#${t.replace(/\s+/g, '-')}`).join(' ')}`);
 	lines.push(
-		`> \`${s.key}\` · [Zotero](zotero://select/items/${s.key}) · [[${mirrorRel}|item JSON]]`
+		`> \`${s.key}\` · [Zotero](${zoteroItemUri(s.key)}) · [[${mirrorRel}|item JSON]]`
 	);
 	return lines.join('\n') + '\n';
 }

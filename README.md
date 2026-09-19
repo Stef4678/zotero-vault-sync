@@ -326,6 +326,13 @@ the vault. The template renders the **body only** (frontmatter is managed).
   preference is off. The mirror still serves search/notes.
 - **Changes only appear while Obsidian is open** — that's inherent to Obsidian
   plugins; edits sync on the next poll/focus/startup.
+- **Clicking a "Zotero" / "Open in Zotero" link opens Zotero but doesn't select
+  the item** — that link uses the legacy `zotero://select/items/<key>` route,
+  which current Zotero does not act on. Zotero only honours
+  `zotero://select/library/items/<key>` (My Library) and
+  `zotero://select/groups/<groupID>/items/<key>` (group libraries). New links use
+  the working route, but links already written into a note keep the old one:
+  refresh the generated note (or re-insert the reference card) to replace them.
 - **Items in the Zotero Trash aren't mirrored** — the API excludes trashed
   items; this mirrors your *library*.
 - **Never-synced/offline-only Zotero items (version 0)** — full snapshots and

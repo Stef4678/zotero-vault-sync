@@ -162,9 +162,25 @@ export function fmtTime(iso: string | null | undefined): string {
 	return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-/** Zotero item page reference used in "Open in Zotero" links. */
+/**
+ * Zotero item page reference used in "Open in Zotero" links.
+ *
+ * Must use the `select/library/items/<key>` route: the legacy
+ * `zotero://select/items/<key>` form is not a route current Zotero recognises, so
+ * clicking it opens the Zotero window but selects nothing (the old
+ * `select/items/<libraryID>_<key>` form is deprecated too). Group libraries would
+ * need `zotero://select/groups/<groupID>/items/<key>`; the mirror is
+ * personal-library only, so this resolves to My Library.
+ *
+ * @see https://forums.zotero.org/discussion/78312/zotero-uri-vs-select-item
+ */
 export function zoteroItemUri(key: string): string {
-	return `zotero://select/items/${key}`;
+	return `zotero://select/library/items/${key}`;
+}
+
+/** Markdown link to an item in the Zotero app (label defaults to the item key). */
+export function zoteroItemLink(key: string, label = key): string {
+	return `[${label}](${zoteroItemUri(key)})`;
 }
 
 export function truncate(s: string, n: number): string {

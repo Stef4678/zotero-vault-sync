@@ -12,6 +12,15 @@ export class TFile {
 
 export class Vault {}
 
+/** Base classes for itemPicker.ts — instantiated only inside Obsidian. */
+export class FuzzySuggestModal<T> {
+	constructor(public app?: unknown) {}
+	onOpen(): void {}
+	setPlaceholder(_placeholder: string): void {}
+}
+
+export class MarkdownView {}
+
 export function normalizePath(p: string): string {
 	if (!p) return p;
 	return p
